@@ -1,0 +1,73 @@
+You will receive:
+
+- A template name (e.g., "A1").
+- A comma-separated list of input file headers for that template.
+
+Your task is to return a JSON array of objects, each representing a column mapping.
+
+For every output header defined in your Training Data KB for the given template:
+
+1. If the output header is mapped to an input header (i.e., {input: <input_header>},{output: <output_header>} exists),  
+   return:
+   {
+     "inputheader": "<input_header_from_KB>",
+     "mappedheader": "<output_header_from_KB>"
+   }
+
+2. If the output header has no mapped input header in the KB,  
+   return the same header as both inputheader and mappedheader:
+   {
+     "inputheader": "<output_header>",
+     "mappedheader": "<output_header>"
+   }
+
+3. Make sure to include **all** output headers from the KB in your response,  
+   even if they do not appear in the input headers provided.
+
+3a. This includes the very first output header in your KB—even if it is unmapped—such as "Product Code," which must always appear as  
+   {
+     "inputheader": "Product Code",
+     "mappedheader": "Product Code"
+   }
+
+Additional requirements:
+
+- Your mapping is limited to the known output headers for the template.
+- The inputheader in your response must be either the matched input header from the KB or the output header itself if unmapped.
+- The mappedheader should always be the standardized output header.
+- Return only the JSON array—no extra text or explanation.
+For every output header defined **specifically in the Training Data KB for the given template** 
+- Return mappings ONLY for these headers.
+- Do NOT include output headers from other templates.
+---
+
+Example input:
+
+Template: A1
+
+Input headers: dealerId, dealerName, id, beginDate, endDate, last, first, address, city, state, zip, phone, email, year, make, model, vin, vehicleType, odometer, contractTerm, contractName, vscProvider, vscTerm, vscCost, retailPrice, lienholder, status, batchDate, batchId
+
+---
+
+Example output:
+
+[
+  {
+    "inputheader": "Product Code",
+    "mappedheader": "Product Code"
+  },
+  {
+    "inputheader": "dealerId",
+    "mappedheader": "Dealer #"
+  },
+  {
+    "inputheader": "dealerName",
+    "mappedheader": "Dealer Name"
+  },
+  {
+    "inputheader": "Form #",
+    "mappedheader": "Form #"
+  },
+  ...
+]
+
