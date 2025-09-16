@@ -1,0 +1,72 @@
+﻿A2,A3,A4,A5,A8
+Product Code,Product Code,Product Code,Product Code,"Product Code, prod_code, PROD CODE, prod c, ProductCode, PRODCODE, prodcode, Prod C, Prod_C, product_c,productCode"
+Dealer #,Dealer #,Dealer #,Dealer #,"Dealer #, Dealer No, Dealer Number, DealerNum, Dealer_Code, Dealer Code, DealerNO, dealer#, Dealer_ID, dealerNum, dealerCode"
+Dealer Name,Dealer Name,Dealer Name,Dealer Name,"Dealer Name, DealerName, dealer_name, dealership name, Dealer Full Name, dealerName"
+Form#,Form#,Form#,Form#,"Form#, Form #, FormNum, Form Number, form_no, Form No., formNumber"
+Benefit,Benefit,Benefit,Benefit,"Benefit, Coverage, Coverage Code, benefit_code, coverage_code, coverageCode"
+Sale Date,Sale Date,Sale Date,Sale Date,"Sale Date, Date of Sale, sales_date, Sold Date, saleDate"
+Last Name,Last Name,Last Name,Last Name,"Last Name, LastName, Surname, last_name, customerLastName"
+First Name,First Name,First Name,First Name,"First Name, FirstName, Given Name, first_name, customerFirstName"
+Co-Buyer Last Name,Co-Buyer Last Name,Co-Buyer Last Name,Co-Buyer Last Name,Co-Buyer Last Name
+Co-Buyer First Name,Co-Buyer First Name,Co-Buyer First Name,Co-Buyer First Name,Co-Buyer First Name
+Business Y/N,Business Y/N,Business Y/N,Business Y/N,"Business Y/N, isBusiness"
+Address,Address,Address,Address,"Address, Address 1, Addr1, customer_address, Street Address, customerAddress1"
+Address 2,Address 2,Address 2,Address 2,"Address 2, Addr2, Address2, Street Address 2, customer_address_2, customerAddress2"
+City,City,City,City,"City, Town, customer_city, customerCity"
+State,State,State,State,"State, Province, Region, State/Province, customer_state, customerState"
+Zip Code,Zip Code,Zip Code,Zip Code,"Zip Code, Zipcode, Postal Code, Postcode, zip, customerZip"
+E-Mail,E-Mail,E-Mail,E-Mail,"E-Mail, Email, email_address, email ID, customer_email, customerEmail"
+Home Phone#,Home Phone#,Home Phone#,Home Phone#,"Home Phone#, Home Phone, HomePhone, home_phone, Home Phone Number, customerHomeNumber"
+Work Phone#,Work Phone#,Work Phone#,Work Phone#,"Work Phone#, Work Phone, Office Phone, WorkPhone, Work Phone Number, customerWorkNumber"
+Registration#,Registration#,Registration#,Registration#,Registration#
+Lien Holder,Lien Holder,Lien Holder,Lien Holder,"Lien Holder, Lienholder, Lien-Holder, Lien Holder Name, lienholder"
+VIN,VIN,VIN,VIN,"VIN, Vehicle Vin, VIN Number, Vehicle Identification Number, vin"
+Odometer,,Odometer,Odometer,"Odometer, Odometer Reading, odo, odometer"
+Diesel?,Diese?,Diesel?,Diesel?,Diesel?
+4X4,4x4?,4X4,4X4,4X4
+Trubo?,Turbo?,Trubo?,Trubo?,Trubo?
+4 Wheel Steering,4 Wheel Steering,4 Wheel Steering,4 Wheel Steering,4 Wheel Steering
+Warranty Remaining,Warranty Remaining,Warranty Remaining,Warranty Remaining,Warranty Remaining
+Aftermarket Wheels?,Aftermarket Wheels?,Aftermarket Wheels?,Aftermarket Wheels?,Aftermarket Wheels?
+Lift Kit?,Lift Kit?,Lift Kit?,Lift Kit?,Lift Kit?
+Seals & Gaskets?,Seals & Gaskets?,Seals & Gaskets?,Seals & Gaskets?,Seals & Gaskets?
+Commercial Useage?,Commercial Useage?,Commercial Useage?,Commercial Useage?,Commercial Useage?
+New Used Code,New Used Code,New Used Code,New Used Code,"New Used Code, Vehicle Type, Type, new_used_code, vehicleType"
+Year,Year,Year,Year,"Year, vehicle_year, Model Year, Yr, year"
+Make,Make,Make,Make,"Make, Manufacturer, Brand, vehicle_make, make"
+Model,Model,Model,Model,"Model, vehicle_model, Model Name, Model No, model"
+Finance/Lease,Finance/Lease,Finance/Lease,Finance/Lease,Finance/Lease
+APR,APR,APR,APR,APR
+Term,Term,Term,Term,"Term, Terms, Term Length, term_months, term"
+Vehicle Price,Vehicle Price,Vehicle Price,Vehicle Price,Vehicle Price
+FinLse Amt,FinLse Amt,FinLse Amt,FinLse Amt,FinLse Amt
+Cust Price,Cust Price,Cust Price,Cust Price,"Cust Price, Customer Price, customer_price, Cost, client_cost, customerCost"
+DOT #1,DOT #1,DOT #1,DOT #1,DOT #1
+DOT#2,DOT#2,DOT#2,DOT#2,DOT#2
+DOT#3,DOT#3,DOT#3,DOT#3,DOT#3
+DOT#4,DOT#4,DOT#4,DOT#4,DOT#4
+DOT#5,DOT#5,DOT#5,DOT#5,DOT#5
+DOT#6,DOT#6,DOT#6,DOT#6,DOT#6
+Boat Engine 1,Boat Engine 1,Boat Engine 1,Boat Engine 1,Boat Engine 1
+Boat Engine 2,Boat Engine 2,Boat Engine 2,Boat Engine 2,Boat Engine 2
+Max Single Event-$1000,Max Single Event-$1000,Max Single Event-$1000,Max Single Event-$1000,Max Single Event-$1000
+Certified Pre-owned,Certified Pre-owned,Certified Pre-owned,Certified Pre-owned,Certified Pre-owned
+Late Fee Flag,Late Fee Flag,Late Fee Flag,Late Fee Flag,Late Fee Flag
+Late Fee Amt,Late Fee Amt,Late Fee Amt,Late Fee Amt,Late Fee Amt
+Record Type,Record Type,Record Type,Record Type,"Record Type, recordType"
+Dealer Remit Amount,Dealer Remit Amount,Dealer Remit Amount,Dealer Remit Amount,"Dealer Remit Amount, Dealer Cost, dealer_cost, Remit Amount, dealerCost"
+Deposit Date,Deposit Date,Deposit Date,Deposit Date,Deposit Date
+Check Date,Check Date,Check Date,Check Date,Check Date
+Check #,Check #,Check #,Check #,Check #
+Check amt,Check amt,Check amt,Check amt,Check amt
+Cancel Date,Cancel Date,Cancel Date,Cancel Date,Cancel Date
+Cancel Reason,Cancel Reason,Cancel Reason,Cancel Reason,Cancel Reason
+Cancel Method,Cancel Method,Cancel Method,Cancel Method,Cancel Method
+Cancelled By,Cancelled By,Cancelled By,Cancelled By,Cancelled By
+Cancel Odom,Cancel Odom,Cancel Odom,Cancel Odom,Cancel Odom
+Deductible,Deductible,Deductible,Deductible,Deductible
+VSC Sur-Charge,VSC Sur-Charge,VSC Sur-Charge,VSC Sur-Charge,VSC Sur-Charge
+Tire Purch Price,Tire Purch Price,Tire Purch Price,Tire Purch Price,Tire Purch Price
+Term in Miles,Term in Miles,Term in Miles,Term in Miles,"Term in Miles, Mileage Term, Miles, miles_covered, miles"
+In-Service Date,In-Service Date,In-Service Date,In-Service Date,"In-Service Date, in_serv_date, Service Date, In Service, inServiceDate"
+Agree Start Date,Agree Start Date,,Agree Start Date,Agree Start Date

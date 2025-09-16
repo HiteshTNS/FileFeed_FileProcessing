@@ -1,0 +1,69 @@
+NOTES FOR ME :
+
+AGENT_ALIAS_ID = "ICRJF8TMZW" (VERSION 23) WORING
+
+
+#Today updated when testing non generic files (worked for all except A10)
+# AGENT_HEADER_MAPPING_PROMPT = (
+#     f"Instructions: For each header in Output Field Specification (column 'Field Name', in exact order), attempt to map to one of the input headers using the following logic:\n"
+#     f"When reading alias cells, treat comma-separated values as distinct aliases. Always preserve the original inputHeader exactly as received in the file, even if it matches one of the aliases.\n"
+#     f"Inside Agent File Input Headers File, the first row consists of different file names and the second row consists of different templates with their data in column-wise format.\n"
+#     f"Step 1: For each input header, check if it exactly or fuzzily matches an alias for a standardized header under template column \"{HARD_CODED_TEMPLATE}\" in \"Agent File Input Headers\".\n"
+#     f"   - If found, and that standardized header exists in Output Field Specification, map it with confidenceScore 100 for exact, 80 for fuzzy.\n"
+#     f"   - Do not create a placeholder for that standardized header later.\n"
+#     f"Step 2: If an input header does not match any standardized header but is in 'Headers with data', map it as inputHeader=<same value>, mappedHeader=\"\" (empty), confidenceScore=0.\n"
+#     f"Step 3: After processing all input headers, add placeholders for any standardized headers from Output Field Specification that remain unmapped. For these, set inputHeader=\"\" (empty), mappedHeader=<Standardized_Header>, confidenceScore=0.\n"
+#     f"Step 4: Append any remaining unmapped input headers with data at the end as inputHeader=<Incoming_Input_header>, mappedHeader=\"\" (empty), confidenceScore=0.\n"
+#     f"Rules:\n"
+#     f"- Do not produce duplicate mappedHeader values in output.\n"
+#     f"- Do not map headers whose standardized output header is not found and which are not present in Headers with Data.\n"
+#     f"Output: Respond ONLY with the JSON array ordered exactly as Output Field Specification 'Field Name' list, followed by any extra input headers."
+# )
+
+The above prompt was working good for generic file
+
+
+AGENT_HEADER_MAPPING_PROMPT = (
+    f"Instructions: You MUST return a JSON array where:\n"
+    f"- Every standardized header from Output Field Specification (column 'Field Name') appears exactly once, in the same order as in the specification.\n"
+    f"- The total number of JSON objects MUST be >= the number of standardized headers present in the output specification file.\n"
+    f"- If a standardized header cannot be mapped, you MUST include it as:\n"
+    f'  {{\"inputHeader\": \"\", \"mappedHeader\": \"<Standardized_Header>\", \"confidenceScore\": 0}}\n'
+    f"- Never skip, drop, or omit any standardized header, even if no input mapping exists.\n\n"
+    f"Step 0: Build Checklists\n"
+    f"- DATA_CHECKLIST = all 'Input headers with data'\n"
+    f"- SPEC_CHECKLIST = all standardized headers from Output Field Specification\n\n"
+    f"Step 1: Alias Matching\n"
+    f"- For each input header, check if it exactly or fuzzily matches an alias in template \"{HARD_CODED_TEMPLATE}\".\n"
+    f"- Exact = confidenceScore 100, fuzzy = 80. Only one mappedHeader per spec header.\n\n"
+    f"Step 2: Self-Mapping for Data Headers ONLY\n"
+    f"- For each input header in DATA_CHECKLIST:\n"
+    f"   - If it maps to a standardized header → output the mapping.\n"
+    f"    -if it does NOT map to any standardized header but the headers is in DATA_CHEKLIST or is in Input Headers with Data -> output:"   
+    f'     {{\"inputHeader\": \"<header>\", \"mappedHeader\": \"\", \"confidenceScore\": 0}}\n'
+    f"- IMPORTANT: Do NOT include any header that is not in DATA_CHECKLIST.\n\n"
+    f"Step 3: Placeholder Coverage\n"
+    f"- After Step 1 and Step 2, ensure every header from SPEC_CHECKLIST is present in the JSON in correct order.\n"
+    f"- If not mapped, add placeholder as described.\n\n"
+    f"Step 4: Append Extras\n"
+    f"- After placeholders, append any headers from DATA_CHECKLIST that were not already included.\n"
+    f"- Ignore all headers that are not in DATA_CHECKLIST.\n\n"
+    f"Final Verification (MANDATORY)\n"
+    f"- Count entries. It MUST be >= the number of standardized headers present in the specification file.\n"
+    f"- Confirm every SPEC_CHECKLIST header appears once.\n"
+    f"- Confirm every DATA_CHECKLIST header appears once.\n"
+    f"- Confirm NO header outside DATA_CHECKLIST is included unless it maps to a standardized header.\n"
+    f"- If any condition fails, regenerate before responding.\n\n"
+    f"Output: ONLY return the JSON array, in this order:\n"
+    f"1) All standardized headers (SPEC_CHECKLIST) in correct order\n"
+    f"2) Followed by any extra DATA_CHECKLIST headers."
+)
+
+The Above Prompt works for all the files as of now
+
+
+====> The Final code we have in the FinalWorkingforallfiles.py
+====>Agent Instruction 2 is the final one
+====> SG_ingest_training_data(with all templates)(16.09.2025) this file has all the updated templates without Output Filed Specification file description
+=====> Zipping the Final Folder and pushing to the code
+

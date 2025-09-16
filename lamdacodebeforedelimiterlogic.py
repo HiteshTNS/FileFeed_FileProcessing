@@ -1,0 +1,442 @@
+import json
+import boto3
+import urllib.parse
+import os
+import logging
+from io import BytesIO
+import pandas as pd
+from botocore.config import Config
+import uuid
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+s3 = boto3.client('s3')
+bedrock_agent_runtime = boto3.client(
+    'bedrock-agent-runtime',
+    region_name="us-west-2",
+    config=Config(connect_timeout=10, read_timeout=120)
+)
+
+AGENT_ID = "QDTSICEWAF"
+AGENT_ALIAS_ID = "ICRJF8TMZW"
+HARD_CODED_TEMPLATE = "A10"
+
+AGENT_FILENAME_VALIDATION_PROMPT = (
+    "You will receive a file name and a template name. "
+    "Your task is to validate whether the file name exists for the given template "
+    "in the 'Agent File Specification' sheet under the 'File Name' column. "
+    "If the file name matches for the template, return JSON: "
+    '{"Validation": "Success", "InputFileName": "<the incoming file name>", "SpecifcationFileName": "<the file name from Agent File Specification>"} '
+    "If not, return JSON: "
+    '{"Validation": "Failed", "InputFileName": "<the incoming file name>", "SpecifcationFileName": "<the file name from Agent File Specification>"} '
+    "Do not return any extra text or explanation."
+)
+
+
+# Updated mapping prompt, explicitly instructing not to hallucinate or skip vehicleType (V0 : Working)
+# AGENT_HEADER_MAPPING_PROMPT = (
+#     "Instructions: For each header in Output Field Specification (column 'Field Name', in exact order), attempt to map to one of the input headers using the following logic:\n"
+#     "When reading alias cells, treat comma-separated values as distinct aliases. Always preserve the original inputHeader exactly as received in the file, even if it matches one of the aliases.\n"
+#     "For each input header, find all alias lists for standardized headers under template column \"A8\" in \"Agent File Input Headers\".\n"
+#     "Check if input header exactly or fuzzily matches an alias for a standardized header.\n"
+#     "Confirm the standardized header exists in Output Field Specification under 'Field Name'.\n"
+#     "If found, map input header to this standardized header with confidenceScore 100 for exact, 80 for fuzzy.\n"
+#     "If no standardized header found via aliases, but input header is in 'Input headers with data', self-map it with confidenceScore 0.\n"
+#     "After mapping all standardized headers, add any unmapped standardized headers as placeholders with inputHeader = mappedHeader and confidenceScore 0.\n"
+#     "Append any remaining unmapped input headers with data at the end.\n"
+#     "Do not produce duplicate mappedHeader values in output.\n"
+#     "Output a JSON array ordered exactly as Output Field Specification 'Field Name' list, followed by any extra input headers.\n"
+#     "Respond ONLY with the JSON array, no explanations or extra text."
+# )
+
+#(V1: Working with one issue)(working 100%)
+# AGENT_HEADER_MAPPING_PROMPT = (
+#     "Instructions: For each header in Output Field Specification (column 'Field Name', in exact order), attempt to map to one of the input headers using the following logic:\n"
+#     "When reading alias cells, treat comma-separated values as distinct aliases. Always preserve the original inputHeader exactly as received in the file, even if it matches one of the aliases.\n"
+#     "For each input header, find all alias lists for standardized headers under template column \"A8\" in \"Agent File Input Headers\".\n"
+#     "Check if input header exactly or fuzzily matches an alias for a standardized header.\n"
+#     "Confirm the standardized header exists in Output Field Specification under 'Field Name'.\n"
+#     "If found, map input header to this standardized header with confidenceScore 100 for exact, 80 for fuzzy.\n"
+#     "If no standardized header found via aliases, but input header is in 'Headers with data', then keep the mappedHeader as empty and fill inputHeader as same as inputHeader with conficence score 0.\n"
+#     "After mapping all standardized headers, add any unmapped standardized headers as placeholders where inputHeader =""(empty) and mappedHeader=""<Standardized_Header>"" with confidenceScore 0(int).\n"
+#     "Append any remaining unmapped input headers with data at the end as inputHeader=""<Incoming_Input_header>"" and mappedHeader=""(empty) with confidence score 0(int).\n"
+#     "Do not produce duplicate mappedHeader values in output.\n"
+#     "Output a JSON array ordered exactly as Output Field Specification 'Field Name' list, followed by any extra input headers.\n"
+#     "Respond ONLY with the JSON array, no explanations or extra text."
+# )
+#(V1: Working with one issue)(working 100%)
+# AGENT_HEADER_MAPPING_PROMPT = (
+#     f"Instructions: For each header in Output Field Specification (column 'Field Name', in exact order), attempt to map to one of the input headers using the following logic:\n"
+#     f"When reading alias cells, treat comma-separated values as distinct aliases. Always preserve the original inputHeader exactly as received in the file, even if it matches one of the aliases.\n"
+#     f"Inside Agent File Input Headers File First row consist the Different File names and second row Consist the different Templates with it's data in column wise. \n"
+#     f"For each input header, find all alias lists for standardized headers under template column \"{HARD_CODED_TEMPLATE}\" in \"Agent File Input Headers\".\n"
+#     f"Check if input header exactly or fuzzily matches an alias for a standardized header.\n"
+#     f"Confirm the standardized header exists in Output Field Specification under 'Field Name'.\n"
+#     f"If found, map input header to this standardized header with confidenceScore 100 for exact, 80 for fuzzy.\n"
+#     f"If no standardized header found via aliases, but input header is in 'Headers with data', then keep the mappedHeader as empty and fill inputHeader as same as inputHeader with confidence score 0.\n"
+#     f"Don not map those headers who's standarized output header is not found and they are not there in Headers with Data.\n"
+#     f"After mapping all standardized headers, add any unmapped standardized headers as placeholders where inputHeader =\"\" (empty) and mappedHeader=\"<Standardized_Header>\" with confidenceScore 0 (int).\n"
+#     f"Append any remaining unmapped input headers with data at the end as inputHeader=\"<Incoming_Input_header>\" and mappedHeader=\"\" (empty) with confidence score 0 (int).\n"
+#     f"Do not produce duplicate mappedHeader values in output.\n"
+#     f"Output a JSON array ordered exactly as Output Field Specification 'Field Name' list, followed by any extra input headers.\n"
+#     f"Respond ONLY with the JSON array, no explanations or extra text."
+# )
+#Today updated when testing non generic files (worked for all except A10)
+# AGENT_HEADER_MAPPING_PROMPT = (
+#     f"Instructions: For each header in Output Field Specification (column 'Field Name', in exact order), attempt to map to one of the input headers using the following logic:\n"
+#     f"When reading alias cells, treat comma-separated values as distinct aliases. Always preserve the original inputHeader exactly as received in the file, even if it matches one of the aliases.\n"
+#     f"Inside Agent File Input Headers File, the first row consists of different file names and the second row consists of different templates with their data in column-wise format.\n"
+#     f"Step 1: For each input header, check if it exactly or fuzzily matches an alias for a standardized header under template column \"{HARD_CODED_TEMPLATE}\" in \"Agent File Input Headers\".\n"
+#     f"   - If found, and that standardized header exists in Output Field Specification, map it with confidenceScore 100 for exact, 80 for fuzzy.\n"
+#     f"   - Do not create a placeholder for that standardized header later.\n"
+#     f"Step 2: If an input header does not match any standardized header but is in 'Headers with data', map it as inputHeader=<same value>, mappedHeader=\"\" (empty), confidenceScore=0.\n"
+#     f"Step 3: After processing all input headers, add placeholders for any standardized headers from Output Field Specification that remain unmapped. For these, set inputHeader=\"\" (empty), mappedHeader=<Standardized_Header>, confidenceScore=0.\n"
+#     f"Step 4: Append any remaining unmapped input headers with data at the end as inputHeader=<Incoming_Input_header>, mappedHeader=\"\" (empty), confidenceScore=0.\n"
+#     f"Rules:\n"
+#     f"- Do not produce duplicate mappedHeader values in output.\n"
+#     f"- Do not map headers whose standardized output header is not found and which are not present in Headers with Data.\n"
+#     f"Output: Respond ONLY with the JSON array ordered exactly as Output Field Specification 'Field Name' list, followed by any extra input headers."
+# )
+
+# AGENT_HEADER_MAPPING_PROMPT = (
+#     f"Instructions: For each header in Output Field Specification (column 'Field Name', in exact order), attempt to map to one of the input headers using the following logic:\n"
+#     f"- When reading alias cells, treat comma-separated values as distinct aliases.\n"
+#     f"- Matching must be case-insensitive, but always preserve the original inputHeader exactly as received in the file.\n"
+#     f"- Inside Agent File Input Headers File, the first row consists of different file names and the second row consists of different templates with their data in column-wise format.\n\n"
+#     f"Step 1: For each input header, check if it exactly or fuzzily (case-insensitive) matches an alias for a standardized header under template column \"{HARD_CODED_TEMPLATE}\" in \"Agent File Input Headers\".\n"
+#     f"- If found, and that standardized header exists in Output Field Specification, map it with confidenceScore 100 for exact, 80 for fuzzy.\n"
+#     f"- Each standardized header (mappedHeader) must appear only once in the output. If multiple input headers match, pick the strongest (exact > fuzzy > first seen).\n"
+#     f"- Do not create a placeholder for that standardized header later.\n\n"
+#     f"Step 2: If an input header does not match any standardized header but is in 'Headers with data', map it as:\n"
+#     f'  {{\"inputHeader\": \"<same value>\", \"mappedHeader\": \"\", \"confidenceScore\": 0}}\n\n'
+#     f"Step 3: After processing all input headers, add placeholders for any standardized headers from Output Field Specification that remain unmapped. For these, set:\n"
+#     f'  {{\"inputHeader\": \"\", \"mappedHeader\": \"<Standardized_Header>\", \"confidenceScore\": 0}}\n\n'
+#     f"Step 4: Append any remaining unmapped input headers with data at the end as:\n"
+#     f'  {{\"inputHeader\": \"<Incoming_Input_header>\", \"mappedHeader\": \"\", \"confidenceScore\": 0}}\n\n'
+#     f"Rules:\n"
+#     f"- Do not produce duplicate mappedHeader values.\n"
+#     f"- Once a mappedHeader is used, it cannot appear again.\n"
+#     f"- Do not map headers whose standardized output header is not found and which are not present in Headers with Data.\n\n"
+#     f"Output: Respond ONLY with the JSON array ordered exactly as Output Field Specification 'Field Name' list, followed by any extra input headers."
+# )
+
+# AGENT_HEADER_MAPPING_PROMPT = (
+#     f"Instructions: For each header in Output Field Specification (column 'Field Name', in exact order), attempt to map to one of the input headers using the following logic:\n"
+#     f"- When reading alias cells, treat comma-separated values as distinct aliases.\n"
+#     f"- Matching must be case-insensitive, but always preserve the original inputHeader exactly as received in the file.\n"
+#     f"- Inside Agent File Input Headers File, the first row consists of different file names and the second row consists of different templates with their data in column-wise format.\n\n"
+#     f"Step 1: For each input header, check if it exactly or fuzzily (case-insensitive) matches an alias for a standardized header under template column \"{HARD_CODED_TEMPLATE}\" in \"Agent File Input Headers\".\n"
+#     f"- If found, and that standardized header exists in Output Field Specification, map it with confidenceScore 100 for exact, 80 for fuzzy.\n"
+#     f"- Each standardized header (mappedHeader) must appear only once in the output. If multiple input headers match, pick the strongest (exact > fuzzy > first seen).\n"
+#     f"- Do not create a placeholder for that standardized header later.\n\n"
+#     f"Step 2: If an input header does not match any standardized header but is in 'Headers with data', it MUST be preserved in the output exactly once. Map it as:\n"
+#     f'  {{\"inputHeader\": \"<same value>\", \"mappedHeader\": \"\", \"confidenceScore\": 0}}\n'
+#     f"- Do not skip or drop any header from 'Headers with data'.\n\n"
+#     f"Step 3: After processing all input headers, add placeholders for any standardized headers from Output Field Specification that remain unmapped. For these, set:\n"
+#     f'  {{\"inputHeader\": \"\", \"mappedHeader\": \"<Standardized_Header>\", \"confidenceScore\": 0}}\n\n'
+#     f"Step 4: After placeholders are added, append any remaining unmapped input headers with data (not already included in Step 2) at the end as:\n"
+#     f'  {{\"inputHeader\": \"<Incoming_Input_header>\", \"mappedHeader\": \"\", \"confidenceScore\": 0}}\n'
+#     f"- Ensure every header from 'Headers with data' is present at least once in the final JSON.\n\n"
+#     f"Rules:\n"
+#     f"- Do not produce duplicate mappedHeader values.\n"
+#     f"- Once a mappedHeader is used, it cannot appear again.\n"
+#     f"- Do not map headers whose standardized output header is not found and which are not present in Headers with Data.\n\n"
+#     f"Output: Respond ONLY with the JSON array ordered exactly as Output Field Specification 'Field Name' list, followed by any extra input headers."
+# )
+#ABove prompt updated with agent help working for A10 template with version 23
+# AGENT_HEADER_MAPPING_PROMPT = (
+#     f"Instructions: You MUST return a JSON array where:\n"
+#     f"- Every standardized header from Output Field Specification (column 'Field Name') appears exactly once, in the same order as in the specification.\n"
+#     f"- The total number of JSON objects MUST be >= the number of standardized headers present in outfiled specification file.\n"
+#     f"- If a standardized header cannot be mapped, you MUST include it as:\n"
+#     f'  {{\"inputHeader\": \"\", \"mappedHeader\": \"<Standardized_Header>\", \"confidenceScore\": 0}}\n'
+#     f"- Never skip, drop, or omit any standardized header, even if no input mapping exists.\n\n"
+#     f"Step 0: Build Checklists\n"
+#     f"- DATA_CHECKLIST = all 'Headers with data'\n"
+#     f"- SPEC_CHECKLIST = all standardized headers from Output Field Specification\n\n"
+#     f"Step 1: Alias Matching\n"
+#     f"- For each input header, check if it exactly or fuzzily matches an alias in template \"{HARD_CODED_TEMPLATE}\".\n"
+#     f"- Exact = confidenceScore 100, fuzzy = 80. Only one mappedHeader per spec header.\n\n"
+#     f"Step 2: Mandatory Data Header Inclusion\n"
+#     f"- Every input header from DATA_CHECKLIST MUST appear exactly once in the output.\n"
+#     f"- If it does not map to a standardized header, include it as:\n"
+#     f'  {{\"inputHeader\": \"<header>\", \"mappedHeader\": \"\", \"confidenceScore\": 0}}\n\n'
+#     f"Step 3: Placeholder Coverage\n"
+#     f"- After Step 1 and Step 2, ensure every header from SPEC_CHECKLIST is present in the JSON in correct order.\n"
+#     f"- If not mapped, add placeholder as described.\n\n"
+#     f"Step 4: Append Extras\n"
+#     f"- After placeholders, append any remaining headers from DATA_CHECKLIST not already included.\n\n"
+#     f"Final Verification (MANDATORY)\n"
+#     f"- Count entries. It MUST be >= the number of standardized headers present in outfiled specification file..\n"
+#     f"- Confirm every SPEC_CHECKLIST header appears once.\n"
+#     f"- Confirm every DATA_CHECKLIST header appears once.\n"
+#     f"- If any are missing, regenerate before responding.\n\n"
+#     f"Output: ONLY return the JSON array, in this order:\n"
+#     f"1) All standardized headers (SPEC_CHECKLIST) in correct order\n"
+#     f"2) Followed by any extra DATA_CHECKLIST headers."
+# )
+
+AGENT_HEADER_MAPPING_PROMPT = (
+    f"Instructions: You MUST return a JSON array where:\n"
+    f"- Every standardized header from Output Field Specification (column 'Field Name') appears exactly once, in the same order as in the specification.\n"
+    f"- The total number of JSON objects MUST be >= the number of standardized headers present in the output specification file.\n"
+    f"- If a standardized header cannot be mapped, you MUST include it as:\n"
+    f'  {{\"inputHeader\": \"\", \"mappedHeader\": \"<Standardized_Header>\", \"confidenceScore\": 0}}\n'
+    f"- Never skip, drop, or omit any standardized header, even if no input mapping exists.\n\n"
+    f"Step 0: Build Checklists\n"
+    f"- DATA_CHECKLIST = all 'Input headers with data'\n"
+    f"- SPEC_CHECKLIST = all standardized headers from Output Field Specification\n\n"
+    f"Step 1: Alias Matching\n"
+    f"- For each input header, check if it exactly or fuzzily matches an alias in template \"{HARD_CODED_TEMPLATE}\".\n"
+    f"- Exact = confidenceScore 100, fuzzy = 80. Only one mappedHeader per spec header.\n\n"
+    f"Step 2: Self-Mapping for Data Headers ONLY\n"
+    f"- For each input header in DATA_CHECKLIST:\n"
+    f"   - If it maps to a standardized header → output the mapping.\n"
+    f"    -if it does NOT map to any standardized header but the headers is in DATA_CHEKLIST or is in Input Headers with Data -> output:"   
+    f'     {{\"inputHeader\": \"<header>\", \"mappedHeader\": \"\", \"confidenceScore\": 0}}\n'
+    f"- IMPORTANT: Do NOT include any header that is not in DATA_CHECKLIST.\n\n"
+    f"Step 3: Placeholder Coverage\n"
+    f"- After Step 1 and Step 2, ensure every header from SPEC_CHECKLIST is present in the JSON in correct order.\n"
+    f"- If not mapped, add placeholder as described.\n\n"
+    f"Step 4: Append Extras\n"
+    f"- After placeholders, append any headers from DATA_CHECKLIST that were not already included.\n"
+    f"- Ignore all headers that are not in DATA_CHECKLIST.\n\n"
+    f"Final Verification (MANDATORY)\n"
+    f"- Count entries. It MUST be >= the number of standardized headers present in the specification file.\n"
+    f"- Confirm every SPEC_CHECKLIST header appears once.\n"
+    f"- Confirm every DATA_CHECKLIST header appears once.\n"
+    f"- Confirm NO header outside DATA_CHECKLIST is included unless it maps to a standardized header.\n"
+    f"- If any condition fails, regenerate before responding.\n\n"
+    f"Output: ONLY return the JSON array, in this order:\n"
+    f"1) All standardized headers (SPEC_CHECKLIST) in correct order\n"
+    f"2) Followed by any extra DATA_CHECKLIST headers."
+)
+
+
+
+
+
+
+
+
+
+# ------------------- Functions -------------------
+
+def extract_headers_with_data(df, headers):
+    """Find headers that actually have non-empty, non-null data."""
+    headers_with_data = []
+    false_positives = []  # debug list
+
+    for col in headers:
+        series = (
+            df[col]
+            .astype(str)
+            .str.strip()
+            .replace("nan", "")
+            .replace("", pd.NA)
+        )
+
+        if series.notna().any():
+            headers_with_data.append(col)
+        else:
+            false_positives.append(col)
+
+    logger.info(f"Total headers: {len(headers)}")
+    logger.info(f"Headers with data count: {len(headers_with_data)}")
+    logger.info(f"Headers with data: {headers_with_data}")
+    logger.info(f"Headers WITHOUT data (ignored): {false_positives}")
+
+    return headers_with_data
+
+
+def load_file_once(file_bytes, file_extension):
+    try:
+        if file_extension == '.csv':
+            df = pd.read_csv(BytesIO(file_bytes))
+        elif file_extension in ['.xls', '.xlsx']:
+            df = pd.read_excel(BytesIO(file_bytes))
+        else:
+            raise ValueError(f"Unsupported file type: {file_extension}")
+        headers = [col.strip() for col in df.columns]
+        df.columns = headers  # normalize column names
+        logger.info(f"Extracted headers: {headers}")
+        return df, headers
+    except Exception as e:
+        logger.error(f"Error reading file: {e}")
+        raise
+
+
+def invoke_agent(payload, session_id):
+    params = {
+        "agentId": AGENT_ID,
+        "agentAliasId": AGENT_ALIAS_ID,
+        "sessionId": session_id,
+        "inputText": payload
+    }
+    response = bedrock_agent_runtime.invoke_agent(**params)
+    chunks = []
+    for event in response.get("completion", []):
+        if "chunk" in event and "bytes" in event["chunk"]:
+            chunks.append(event["chunk"]["bytes"].decode("utf-8"))
+    full_output = "".join(chunks).strip()
+    logger.info(f"Raw agent response: {full_output}")
+    return full_output
+
+
+def create_output_excel(mappings, input_data_df):
+    """Ensure all standardized headers and all headers with data appear in output"""
+    df_out = pd.DataFrame()
+    seen_mapped = set()
+
+    # First, write all mapped columns (standardized headers or self-mapped)
+    for m in mappings:
+        input_header = m.get("inputHeader", "").strip()
+        mapped_header = m.get("mappedHeader", "").strip()
+
+        # Determine final column name
+        col_name = mapped_header if mapped_header else input_header
+        if not col_name or col_name in seen_mapped:
+            continue
+        seen_mapped.add(col_name)
+
+        # Pull data from input if exists
+        if input_header in input_data_df.columns:
+            col_data = input_data_df[input_header]
+            # default values for special columns
+            if col_name == "customerCountryCode":
+                col_data = col_data.replace("", pd.NA).fillna("USA")
+            elif col_name == "currencyCode":
+                col_data = col_data.replace("", pd.NA).fillna("USD")
+            df_out[col_name] = col_data
+        else:
+            # Placeholder or unmapped data
+            if col_name == "customerCountryCode":
+                df_out[col_name] = "USA"
+            elif col_name == "currencyCode":
+                df_out[col_name] = "USD"
+            else:
+                df_out[col_name] = ""
+
+    output_stream = BytesIO()
+    df_out.to_excel(output_stream, index=False, engine="openpyxl")
+    output_stream.seek(0)
+    return output_stream
+
+
+# ------------------- Lambda Handler -------------------
+
+def lambda_handler(event, context):
+    try:
+        record = event['Records'][0]
+        bucket = record['s3']['bucket']['name']
+        key = urllib.parse.unquote_plus(record['s3']['object']['key'])
+        file_name = os.path.basename(key)
+        template_name = HARD_CODED_TEMPLATE
+
+        logger.info(f"Triggered by file: {key} in bucket: {bucket}")
+
+        # Step 0: Validate file via agent
+        validation_payload = f"File Name: {file_name}\nTemplate: {template_name}\n{AGENT_FILENAME_VALIDATION_PROMPT}"
+        validation_response = invoke_agent(validation_payload, str(uuid.uuid4()))
+        try:
+            validation_result = json.loads(validation_response)
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON from agent in validation step")
+            return {'statusCode': 500, 'body': 'Invalid JSON from agent'}
+
+        if validation_result.get("Validation") != "Success":
+            logger.error(f"File validation failed for {file_name}.")
+            return {'statusCode': 400, 'body': f"File validation failed for {file_name}"}
+
+        # Step 1: Load file
+        _, ext = os.path.splitext(key)
+        ext = ext.lower()
+        if ext not in ['.csv', '.xls', '.xlsx']:
+            return {'statusCode': 400, 'body': f"Unsupported file type {ext}"}
+
+        s3_obj = s3.get_object(Bucket=bucket, Key=key)
+        file_bytes = s3_obj['Body'].read()
+        input_data_df, headers = load_file_once(file_bytes, ext)
+        if not headers:
+            return {'statusCode': 400, 'body': 'No headers extracted'}
+
+        # Step 2: Extract headers with actual data
+        headers_with_data = extract_headers_with_data(input_data_df, headers)
+        logger.info(f"Headers with data: {headers_with_data}")
+
+        # Step 3: Invoke agent for header mapping
+        mapping_payload = (
+            f"Template: {template_name}\n"
+            f"Input headers: {json.dumps(headers)}\n"
+            f"Input headers with data: {json.dumps(headers_with_data)}\n"
+            f"{AGENT_HEADER_MAPPING_PROMPT}"
+        )
+
+        logger.info(f"Sending payload to agent:\n{mapping_payload.encode('unicode_escape').decode()}")
+        mapping_response = invoke_agent(mapping_payload, str(uuid.uuid4()))
+        try:
+            mappings = json.loads(mapping_response)
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON from agent in mapping step")
+            return {'statusCode': 500, 'body': 'Invalid JSON from agent'}
+
+        logger.info(f"Parsed {len(mappings)} mappings")
+
+        # Step 4: Post-processing corrected mappings
+        # --- Post-processing of agent mappings ---
+        corrected_mappings = []
+        seen_input_headers = set()
+        seen_mapped_headers = set()
+
+        # Step 1: Keep valid agent mappings
+        for m in mappings:
+            input_header = m.get("inputHeader", "").strip()
+            mapped_header = m.get("mappedHeader", "").strip()
+
+            # Skip only if both inputHeader and mappedHeader are empty
+            # AND inputHeader is not in headers_with_data
+            if not input_header and not mapped_header:
+                continue
+            if input_header and input_header not in headers_with_data and not mapped_header:
+                continue
+
+            # Skip duplicates
+            if mapped_header and mapped_header in seen_mapped_headers:
+                continue
+            if input_header and input_header in seen_input_headers:
+                continue
+
+            corrected_mappings.append(m)
+            if input_header:
+                seen_input_headers.add(input_header)
+            if mapped_header:
+                seen_mapped_headers.add(mapped_header)
+
+        # Step 2: Add missing headers with data (not present in agent output)
+        for h in headers_with_data:
+            if h not in seen_input_headers:
+                corrected_mappings.append({
+                    "inputHeader": h,
+                    "mappedHeader": "",
+                    "confidenceScore": 0
+                })
+                seen_input_headers.add(h)
+
+        logger.info(f"Corrected mappings count: {len(corrected_mappings)}")
+
+        # Step 5: Generate output Excel
+        output_stream = create_output_excel(corrected_mappings, input_data_df)
+        base_name = os.path.basename(key)
+        name_split = base_name.rsplit('.', 1)
+        output_file = f"{name_split[0]}_final.{name_split[1]}" if len(name_split) == 2 else f"{base_name}_final.xlsx"
+        output_key = f"output/{output_file}"
+
+        s3.put_object(Bucket=bucket, Key=output_key, Body=output_stream.getvalue())
+        logger.info(f"Output saved to {output_key}")
+
+        return {'statusCode': 200, 'body': f"Processed {key}, output saved to {output_key}"}
+
+    except Exception as e:
+        logger.error(f"Error processing file: {e}", exc_info=True)
+        return {'statusCode': 500, 'body': str(e)}
