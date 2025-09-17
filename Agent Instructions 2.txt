@@ -205,5 +205,36 @@ AGENT_HEADER_MAPPING_PROMPT = (
     "Output a JSON array ordered exactly as Output Field Specification 'Field Name' list, followed by any extra input headers.\n"
     "Respond ONLY with the JSON array, no explanations or extra text."
 )
+
+
+
+ @DELETE
+    @Path("/{id}")
+    public Response deleteTeam(@PathParam("id") String id) {
+        Team team = teamRepository.findById(new ObjectId(id));
+        if (team == null) {
+            throw new NotFoundException("Team not found with ID: " + id);
+        }
+
+        // Prevent deleting team if players belong to it
+        List<Player> players = playerRepository.list("sold_to_team_id", team.id);
+        if (!players.isEmpty()) {
+            return Response.status(Response.Status.CONFLICT)
+                    .entity("Cannot delete team '" + team.name + "' because players are still assigned to it.")
+                    .build();
+        }
+
+        // Delete the team
+        teamRepository.delete(team);
+
+        return Response.status(Response.Status.OK)
+                .entity("Team '" + team.name + "' deleted successfully.")
+                .type(MediaType.TEXT_PLAIN)
+                .build();
+    }
+
 	
+
+
 	
+
