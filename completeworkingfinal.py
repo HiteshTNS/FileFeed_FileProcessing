@@ -7,6 +7,7 @@ from io import BytesIO
 import pandas as pd
 from botocore.config import Config
 import uuid
+import csv
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -25,13 +26,17 @@ HARD_CODED_TEMPLATE = "A10"
 AGENT_FILENAME_VALIDATION_PROMPT = (
     "You will receive a file name and a template name. "
     "Your task is to validate whether the file name exists for the given template "
-    "in the 'Agent File Specification' sheet under the 'File Name' column. "
+    "With same Agent (Template) multiple files will associated with it, so first look for the file name under column 'File Name' inside 'Agent File Specification' "
+    "in the 'Agent File Specification' sheet under the 'File Name' column.Go through full column to match the file name"
     "If the file name matches for the template, return JSON: "
     '{"Validation": "Success", "InputFileName": "<the incoming file name>", "SpecifcationFileName": "<the file name from Agent File Specification>"} '
     "If not, return JSON: "
     '{"Validation": "Failed", "InputFileName": "<the incoming file name>", "SpecifcationFileName": "<the file name from Agent File Specification>"} '
     "Do not return any extra text or explanation."
 )
+
+
+
 
 
 # Updated mapping prompt, explicitly instructing not to hallucinate or skip vehicleType (V0 : Working)
@@ -64,24 +69,15 @@ AGENT_FILENAME_VALIDATION_PROMPT = (
 #     "Do not produce duplicate mappedHeader values in output.\n"
 #     "Output a JSON array ordered exactly as Output Field Specification 'Field Name' list, followed by any extra input headers.\n"
 #     "Respond ONLY with the JSON array, no explanations or extra text."
-# )
+# )	
 #(V1: Working with one issue)(working 100%)
 # AGENT_HEADER_MAPPING_PROMPT = (
 #     f"Instructions: For each header in Output Field Specification (column 'Field Name', in exact order), attempt to map to one of the input headers using the following logic:\n"
 #     f"When reading alias cells, treat comma-separated values as distinct aliases. Always preserve the original inputHeader exactly as received in the file, even if it matches one of the aliases.\n"
 #     f"Inside Agent File Input Headers File First row consist the Different File names and second row Consist the different Templates with it's data in column wise. \n"
 #     f"For each input header, find all alias lists for standardized headers under template column \"{HARD_CODED_TEMPLATE}\" in \"Agent File Input Headers\".\n"
-#     f"Check if input header exactly or fuzzily matches an alias for a standardized header.\n"
-#     f"Confirm the standardized header exists in Output Field Specification under 'Field Name'.\n"
-#     f"If found, map input header to this standardized header with confidenceScore 100 for exact, 80 for fuzzy.\n"
-#     f"If no standardized header found via aliases, but input header is in 'Headers with data', then keep the mappedHeader as empty and fill inputHeader as same as inputHeader with confidence score 0.\n"
-#     f"Don not map those headers who's standarized output header is not found and they are not there in Headers with Data.\n"
-#     f"After mapping all standardized headers, add any unmapped standardized headers as placeholders where inputHeader =\"\" (empty) and mappedHeader=\"<Standardized_Header>\" with confidenceScore 0 (int).\n"
-#     f"Append any remaining unmapped input headers with data at the end as inputHeader=\"<Incoming_Input_header>\" and mappedHeader=\"\" (empty) with confidence score 0 (int).\n"
-#     f"Do not produce duplicate mappedHeader values in output.\n"
-#     f"Output a JSON array ordered exactly as Output Field Specification 'Field Name' list, followed by any extra input headers.\n"
-#     f"Respond ONLY with the JSON array, no explanations or extra text."
-# )
+
+
 #Today updated when testing non generic files (worked for all except A10)
 # AGENT_HEADER_MAPPING_PROMPT = (
 #     f"Instructions: For each header in Output Field Specification (column 'Field Name', in exact order), attempt to map to one of the input headers using the following logic:\n"
@@ -214,14 +210,108 @@ AGENT_HEADER_MAPPING_PROMPT = (
 )
 
 
-
-
-
-
-
-
-
 # ------------------- Functions -------------------
+# def detect_file_delimiter(file_bytes, candidate_delimiters=[",", "\t", ";", "|", " "]):
+#     """
+#     Detect delimiter from the first line of the file content.
+#     """
+#     first_line = file_bytes.decode("utf-8", errors="ignore").split("\n")[0]
+#     delimiter_counts = {d: first_line.count(d) for d in candidate_delimiters}
+#     detected = max(delimiter_counts, key=delimiter_counts.get)
+
+#     if delimiter_counts[detected] <= 1:  # fallback if nothing useful
+#         return ","
+#     logger.info(f"[INFO] Detected delimiter: '{detected}' with {delimiter_counts[detected]} occurrences")
+#     return detected
+
+
+# def load_file_once(file_bytes, file_extension):
+#     try:
+#         if file_extension == '.csv':
+#             # detect delimiter dynamically
+#             detected_delim = detect_file_delimiter(file_bytes)
+#             df = pd.read_csv(BytesIO(file_bytes), delimiter=detected_delim, dtype=str, keep_default_na=False)
+#         elif file_extension in ['.xls', '.xlsx']:
+#             df = pd.read_excel(BytesIO(file_bytes), dtype=str)
+#         else:
+#             raise ValueError(f"Unsupported file type: {file_extension}")
+
+#         headers = [str(col).strip() for col in df.columns]
+#         df.columns = headers  # normalize column names
+#         logger.info(f"Extracted headers: {headers}")
+#         return df, headers
+#     except Exception as e:
+#         logger.error(f"Error reading file: {e}", exc_info=True)
+#         raise
+
+# -------------------------------
+# Load file with dynamic delimiter
+# -------------------------------
+# def load_file_once(file_bytes, file_extension):
+#     try:
+#         if file_extension == '.csv':
+#             detected_delim = detect_file_delimiter(file_bytes)
+#             df = pd.read_csv(BytesIO(file_bytes), delimiter=detected_delim, dtype=str, keep_default_na=False)
+#         elif file_extension in ['.xls', '.xlsx']:
+#             df = pd.read_excel(BytesIO(file_bytes), dtype=str)
+#         else:
+#             raise ValueError(f"Unsupported file type: {file_extension}")
+
+#         headers = [str(col).strip() for col in df.columns]
+#         df.columns = headers  # normalize column names
+#         logger.info(f"[INFO] Extracted headers: {headers}")
+#         return df, headers
+#     except Exception as e:
+#         logger.error(f"[ERROR] Reading file failed: {e}", exc_info=True)
+#         raise
+
+# -------------------------------
+# Detect delimiter (helper function)
+# -------------------------------
+def detect_file_delimiter(file_bytes, sample_size=5000):
+    """
+    Detect delimiter from the first few KB of a text-based file.
+    """
+    sample = file_bytes[:sample_size].decode("utf-8", errors="ignore")
+
+    possible_delims = [",", "\t", "|", ";", ":", "~"]
+
+    delim_counts = {d: sample.count(d) for d in possible_delims}
+    detected = max(delim_counts, key=delim_counts.get)
+
+    if delim_counts[detected] == 0:
+        raise ValueError("No valid delimiter found in file!")
+
+    logger.info(f"[INFO] Detected delimiter: '{detected}'")
+    return detected
+
+# -------------------------------
+# Load file with dynamic delimiter
+# -------------------------------
+def load_file_once(file_bytes, file_extension):
+    try:
+        if file_extension in ['.csv', '.txt']:
+            # Detect delimiter dynamically
+            detected_delim = detect_file_delimiter(file_bytes)
+            df = pd.read_csv(BytesIO(file_bytes), delimiter=detected_delim, dtype=str, keep_default_na=False)
+
+        elif file_extension in ['.xls', '.xlsx']:
+            df = pd.read_excel(BytesIO(file_bytes), dtype=str)
+
+        else:
+            raise ValueError(f"Unsupported file type: {file_extension}")
+
+        # Normalize headers
+        headers = [str(col).strip() for col in df.columns]
+        df.columns = headers
+        logger.info(f"[INFO] Extracted headers: {headers}")
+
+        return df, headers
+
+    except Exception as e:
+        logger.error(f"[ERROR] Reading file failed: {e}", exc_info=True)
+        raise
+
 
 def extract_headers_with_data(df, headers):
     """Find headers that actually have non-empty, non-null data."""
@@ -250,21 +340,21 @@ def extract_headers_with_data(df, headers):
     return headers_with_data
 
 
-def load_file_once(file_bytes, file_extension):
-    try:
-        if file_extension == '.csv':
-            df = pd.read_csv(BytesIO(file_bytes))
-        elif file_extension in ['.xls', '.xlsx']:
-            df = pd.read_excel(BytesIO(file_bytes))
-        else:
-            raise ValueError(f"Unsupported file type: {file_extension}")
-        headers = [col.strip() for col in df.columns]
-        df.columns = headers  # normalize column names
-        logger.info(f"Extracted headers: {headers}")
-        return df, headers
-    except Exception as e:
-        logger.error(f"Error reading file: {e}")
-        raise
+# def load_file_once(file_bytes, file_extension):
+#     try:
+#         if file_extension == '.csv':
+#             df = pd.read_csv(BytesIO(file_bytes))
+#         elif file_extension in ['.xls', '.xlsx']:
+#             df = pd.read_excel(BytesIO(file_bytes))
+#         else:
+#             raise ValueError(f"Unsupported file type: {file_extension}")
+#         headers = [col.strip() for col in df.columns]
+#         df.columns = headers  # normalize column names
+#         logger.info(f"Extracted headers: {headers}")
+#         return df, headers
+#     except Exception as e:
+#         logger.error(f"Error reading file: {e}")
+#         raise
 
 
 def invoke_agent(payload, session_id):
@@ -352,7 +442,7 @@ def lambda_handler(event, context):
         # Step 1: Load file
         _, ext = os.path.splitext(key)
         ext = ext.lower()
-        if ext not in ['.csv', '.xls', '.xlsx']:
+        if ext not in ['.csv', '.xls', '.xlsx', '.txt']:
             return {'statusCode': 400, 'body': f"Unsupported file type {ext}"}
 
         s3_obj = s3.get_object(Bucket=bucket, Key=key)
@@ -429,7 +519,10 @@ def lambda_handler(event, context):
         output_stream = create_output_excel(corrected_mappings, input_data_df)
         base_name = os.path.basename(key)
         name_split = base_name.rsplit('.', 1)
-        output_file = f"{name_split[0]}_final.{name_split[1]}" if len(name_split) == 2 else f"{base_name}_final.xlsx"
+        # output_file = f"{name_split[0]}_final.{name_split[1]}" if len(name_split) == 2 else f"{base_name}_final.xlsx"
+        # output_key = f"output/{output_file}"
+        # Always save as .xlsx regardless of input
+        output_file = f"{name_split[0]}_final.xlsx"
         output_key = f"output/{output_file}"
 
         s3.put_object(Bucket=bucket, Key=output_key, Body=output_stream.getvalue())
